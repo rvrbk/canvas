@@ -13,6 +13,8 @@ use App\Models\Contribution;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class ContributionController extends Controller
 {
@@ -53,15 +55,29 @@ class ContributionController extends Controller
         $board->refresh();
 
         if ($board->status === BoardStatus::Completed) {
-            broadcast(new BoardCompleted($board));
+            $this->broadcastSafely(fn () => broadcast(new BoardCompleted($board)));
             $this->startNextBoard($board);
         } else {
-            broadcast(new ContributionSubmitted($board, $contribution));
+            $this->broadcastSafely(fn () => broadcast(new ContributionSubmitted($board, $contribution)));
         }
 
         return (new ContributionResource($contribution))
             ->response()
             ->setStatusCode(201);
+    }
+
+    /**
+     * Realtime updates are a nice-to-have: a broadcasting hiccup (Reverb
+     * unreachable, misconfigured, etc.) must never turn an already-saved
+     * contribution into a failed-looking request.
+     */
+    private function broadcastSafely(callable $broadcast): void
+    {
+        try {
+            $broadcast();
+        } catch (Throwable $exception) {
+            Log::warning('Failed to broadcast board update.', ['exception' => $exception]);
+        }
     }
 
     private function startNextBoard(Board $completedBoard): void
