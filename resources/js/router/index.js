@@ -63,4 +63,15 @@ router.beforeEach(async (to) => {
     return true;
 });
 
+// Track SPA page views in Google Analytics 4.
+// The gtag snippet in app.blade.php sets send_page_view: false so only
+// this hook fires page_view events, preventing a duplicate on the initial load.
+router.afterEach((to) => {
+    if (typeof window.gtag !== 'function') return;
+    window.gtag('event', 'page_view', {
+        page_path: to.fullPath,
+        page_title: document.title,
+    });
+});
+
 export default router;
